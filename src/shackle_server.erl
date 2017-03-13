@@ -215,8 +215,18 @@ handle_msg({tcp_error, Socket, Reason}, #state {
     shackle_utils:warning_msg(PoolName, "tcp connection error: ~p", [Reason]),
     shackle_tcp:close(Socket),
     close(State);
-handle_msg({timeout, ExtRequestId}, State) ->
-    ok = process_replies([{ExtRequestId, {error, timeout}}], State),
+handle_msg({timeout, ExtRequestId}, #state {
+        client_bin = ClientBin,
+        name = Name
+    } = State) ->
+
+    case shackle_queue:remove(Name, ExtRequestId) of
+        {ok, Cast, _TimerRef} ->
+            statsderl:increment(["shackle.", ClientBin, ".timeout"], 1, 0.005),
+            reply(Name, {error, timeout}, Cast);
+        {error, not_found} ->
+            ok
+    end,
     {ok, State};
 handle_msg({udp, _Socket, _Ip, _InPortNo, Data}, #state {
         client_bin = ClientBin
