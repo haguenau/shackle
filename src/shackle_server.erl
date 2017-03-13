@@ -111,43 +111,6 @@ close(#state {name = Name} = State) ->
     reply_all(Name, {error, socket_closed}),
     reconnect(State).
 
-handle_msg(?MSG_CONNECT, #state {
-        client = Client,
-        ip = Ip,
-        pool_name = PoolName,
-        port = Port,
-        protocol = Protocol,
-        reconnect_state = ReconnectState,
-        socket_options = SocketOptions
-    } = State) ->
-
-    case Protocol:new(Ip, Port, SocketOptions) of
-        {ok, Socket} ->
-            {ok, ClientState} = Client:init(),
-            inet:setopts(Socket, [{active, false}]),
-
-            case Client:setup(Socket, ClientState) of
-                {ok, ClientState2} ->
-                    inet:setopts(Socket, [{active, true}]),
-
-                    {ok, State#state {
-                        client_state = ClientState2,
-                        reconnect_state = reconnect_state_reset(ReconnectState),
-                        socket = Socket
-                    }};
-                {error, Reason, ClientState2} ->
-                    shackle_utils:warning_msg(PoolName,
-                        "setup error: ~p", [Reason]),
-
-                    reconnect(State#state {
-                        client_state = ClientState2
-                    })
-            end;
-        {error, Reason} ->
-            shackle_utils:warning_msg(PoolName,
-                "~p connect error: ~p", [Protocol, Reason]),
-            reconnect(State)
-    end;
 handle_msg(#cast {} = Cast, #state {
         socket = undefined,
         name = Name
@@ -186,6 +149,31 @@ handle_msg(#cast {
             Protocol:close(Socket),
             close(State)
     end;
+handle_msg({tcp, _Port, Data}, #state {
+        client_bin = ClientBin
+    } = State) ->
+
+    statsderl:increment(["shackle.", ClientBin, ".recv"], 1, 0.005),
+    handle_msg_data(Data, State);
+handle_msg({udp, _Socket, _Ip, _InPortNo, Data}, #state {
+        client_bin = ClientBin
+    } = State) ->
+
+    statsderl:increment(["shackle.", ClientBin, ".recv"], 1, 0.005),
+    handle_msg_data(Data, State);
+handle_msg({timeout, ExtRequestId}, #state {
+        client_bin = ClientBin,
+        name = Name
+    } = State) ->
+
+    case shackle_queue:remove(Name, ExtRequestId) of
+        {ok, Cast, _TimerRef} ->
+            statsderl:increment(["shackle.", ClientBin, ".timeout"], 1, 0.005),
+            reply(Name, {error, timeout}, Cast);
+        {error, not_found} ->
+            ok
+    end,
+    {ok, State};
 handle_msg({inet_reply, _Socket, ok}, State) ->
     {ok, State};
 handle_msg({inet_reply, _Socket, {error, Reason}}, #state {
@@ -194,12 +182,6 @@ handle_msg({inet_reply, _Socket, {error, Reason}}, #state {
 
     shackle_utils:warning_msg(PoolName, "udp send error: ~p", [Reason]),
     {ok, State};
-handle_msg({tcp, _Port, Data}, #state {
-        client_bin = ClientBin
-    } = State) ->
-
-    statsderl:increment(["shackle.", ClientBin, ".recv"], 1, 0.005),
-    handle_msg_data(Data, State);
 handle_msg({tcp_closed, Socket}, #state {
         socket = Socket,
         pool_name = PoolName
@@ -215,25 +197,43 @@ handle_msg({tcp_error, Socket, Reason}, #state {
     shackle_utils:warning_msg(PoolName, "tcp connection error: ~p", [Reason]),
     shackle_tcp:close(Socket),
     close(State);
-handle_msg({timeout, ExtRequestId}, #state {
-        client_bin = ClientBin,
-        name = Name
+handle_msg(?MSG_CONNECT, #state {
+        client = Client,
+        ip = Ip,
+        pool_name = PoolName,
+        port = Port,
+        protocol = Protocol,
+        reconnect_state = ReconnectState,
+        socket_options = SocketOptions
     } = State) ->
 
-    case shackle_queue:remove(Name, ExtRequestId) of
-        {ok, Cast, _TimerRef} ->
-            statsderl:increment(["shackle.", ClientBin, ".timeout"], 1, 0.005),
-            reply(Name, {error, timeout}, Cast);
-        {error, not_found} ->
-            ok
-    end,
-    {ok, State};
-handle_msg({udp, _Socket, _Ip, _InPortNo, Data}, #state {
-        client_bin = ClientBin
-    } = State) ->
+    case Protocol:new(Ip, Port, SocketOptions) of
+        {ok, Socket} ->
+            {ok, ClientState} = Client:init(),
+            inet:setopts(Socket, [{active, false}]),
 
-    statsderl:increment(["shackle.", ClientBin, ".recv"], 1, 0.005),
-    handle_msg_data(Data, State).
+            case Client:setup(Socket, ClientState) of
+                {ok, ClientState2} ->
+                    inet:setopts(Socket, [{active, true}]),
+
+                    {ok, State#state {
+                        client_state = ClientState2,
+                        reconnect_state = reconnect_state_reset(ReconnectState),
+                        socket = Socket
+                    }};
+                {error, Reason, ClientState2} ->
+                    shackle_utils:warning_msg(PoolName,
+                        "setup error: ~p", [Reason]),
+
+                    reconnect(State#state {
+                        client_state = ClientState2
+                    })
+            end;
+        {error, Reason} ->
+            shackle_utils:warning_msg(PoolName,
+                "~p connect error: ~p", [Protocol, Reason]),
+            reconnect(State)
+    end.
 
 handle_msg_data(Data, #state {
         client = Client,
