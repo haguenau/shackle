@@ -97,6 +97,8 @@ server(Name) ->
                 true ->
                     {ok, Client, Server};
                 false ->
+                    statsderl:increment(["shackle.", client_bin(Client), ".backlog_full"],
+                        1, 0.005),
                     {error, backlog_full}
             end;
         {error, Reson} ->
@@ -104,6 +106,19 @@ server(Name) ->
     end.
 
 %% private
+client_bin(anchor_client) ->
+    <<"anchor_client">>;
+client_bin(flare_client) ->
+    <<"flare_client">>;
+client_bin(identifyd_client) ->
+    <<"identifyd_client">>;
+client_bin(iplists_client) ->
+    <<"iplists_client">>;
+client_bin(marina_client) ->
+    <<"marina_client">>;
+client_bin(pacingderl_client) ->
+    <<"pacingderl_client">>.
+
 cleanup(Name, OptionsRec) ->
     cleanup_ets(Name, OptionsRec),
     compile_pool_utils().
