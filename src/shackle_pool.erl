@@ -106,6 +106,10 @@ server(Name) ->
     end.
 
 %% private
+client_bin(acr_client_historical) ->
+    <<"acr_client_historical">>;
+client_bin(acr_client_instant) ->
+    <<"acr_client_instant">>;
 client_bin(anchor_client) ->
     <<"anchor_client">>;
 client_bin(flare_client) ->
@@ -117,7 +121,9 @@ client_bin(iplists_client) ->
 client_bin(marina_client) ->
     <<"marina_client">>;
 client_bin(pacingderl_client) ->
-    <<"pacingderl_client">>.
+    <<"pacingderl_client">>;
+client_bin(Atom) ->
+    atom_to_binary(Atom, latin1).
 
 cleanup(Name, OptionsRec) ->
     cleanup_ets(Name, OptionsRec),
