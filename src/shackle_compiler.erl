@@ -83,7 +83,7 @@ server_name_clauses([{PoolName, #pool_options {
     }} | T], Acc) ->
 
     ServerClauses = [server_name_clause(PoolName, Index) ||
-        Index <- lists:seq(0, PoolSize)],
+        Index <- lists:seq(1, PoolSize)],
     server_name_clauses(T, Acc ++ ServerClauses).
 
 to_syntax(X) when is_atom(X) ->

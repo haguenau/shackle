@@ -136,6 +136,8 @@ options_rec(Client, Options) ->
         pool_strategy = PoolStrategy
     }.
 
+server_index(_Name, 1, random) ->
+    1;
 server_index(_Name, PoolSize, random) ->
     shackle_utils:random(PoolSize);
 server_index(Name, PoolSize, round_robin) ->
